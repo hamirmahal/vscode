@@ -350,6 +350,7 @@ class EditorStatus extends Disposable {
 	private readonly selectionElement = this._register(new MutableDisposable<IStatusbarEntryAccessor>());
 	private readonly encodingElement = this._register(new MutableDisposable<IStatusbarEntryAccessor>());
 	private readonly eolElement = this._register(new MutableDisposable<IStatusbarEntryAccessor>());
+	private readonly fileSizeElement = this._register(new MutableDisposable<IStatusbarEntryAccessor>());
 	private readonly languageElement = this._register(new MutableDisposable<IStatusbarEntryAccessor>());
 	private readonly metadataElement = this._register(new MutableDisposable<IStatusbarEntryAccessor>());
 
@@ -366,6 +367,7 @@ class EditorStatus extends Disposable {
 	constructor(
 		private readonly targetWindowId: number,
 		@IEditorService private readonly editorService: IEditorService,
+		@IFileService private readonly fileService: IFileService,
 		@IQuickInputService private readonly quickInputService: IQuickInputService,
 		@ILanguageService private readonly languageService: ILanguageService,
 		@ITextFileService private readonly textFileService: ITextFileService,
@@ -673,10 +675,65 @@ class EditorStatus extends Disposable {
 		return undefined;
 	}
 
+	private formatFileSize(bytes: number, detailed: boolean): string {
+		if (bytes < 0) {
+			console.warn(`Invalid file size: ${bytes}`);
+			return detailed ? '0 bytes' : '0 B';
+		}
+
+		if (bytes === 0) {
+			return detailed ? '0 bytes' : '0 B';
+		}
+
+		try {
+			// This uses 1000 and B, kB, MB, ... to be consistent with file explorers.
+			const k = 1000;
+			const sizes = ['B', 'kB', 'MB', 'GB', 'TB'];
+			const fullNames = ['bytes', 'kilobytes', 'megabytes', 'gigabytes', 'terabytes'];
+			const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+			const size = i === 0 ? bytes : parseFloat((bytes / Math.pow(k, i)).toFixed(1));
+
+			if (detailed) {
+				return sizes[i] === 'B' && size === 1
+					? '1 byte'
+					: `${size} ${fullNames[i]} (${bytes.toLocaleString()} bytes)`;
+			}
+
+			return `${size} ${sizes[i]}`;
+		} catch (error) {
+			console.error(`Error formatting file size: ${error}`);
+			return detailed ? `${bytes.toLocaleString()} bytes` : `${bytes} B`;
+		}
+	}
+
+	private async updateFileSizeElement(resource: URI | undefined): Promise<void> {
+		if (!resource || resource.scheme === Schemas.untitled) {
+			this.fileSizeElement.clear();
+			return;
+		}
+
+		try {
+			const { size } = await this.fileService.stat(resource);
+			const detailedSize = this.formatFileSize(size, true);
+			const props: IStatusbarEntry = {
+				text: this.formatFileSize(size, false),
+				name: localize('status.editor.fileSize', 'File Size'),
+				ariaLabel: localize('status.editor.fileSize.aria', 'File Size: {0}', detailedSize),
+				tooltip: localize('status.editor.fileSize.tooltip', 'File Size: {0}', detailedSize),
+			};
+
+			this.updateElement(this.fileSizeElement, props, 'status.editor.fileSize', StatusbarAlignment.RIGHT, 100.3);
+		} catch (error) {
+			console.error(`Error retrieving file size for ${resource.toString()}:`, error);
+			this.fileSizeElement.clear();
+		}
+	}
+
 	private updateStatusBar(): void {
 		const activeInput = this.editorService.activeEditor;
 		const activeEditorPane = this.editorService.activeEditorPane;
 		const activeCodeEditor = activeEditorPane ? getCodeEditor(activeEditorPane.getControl()) ?? undefined : undefined;
+		const resource = EditorResourceAccessor.getCanonicalUri(activeInput, { supportSideBySide: SideBySideEditor.PRIMARY });
 
 		// Update all states
 		this.onColumnSelectionModeChange(activeCodeEditor);
@@ -686,10 +743,20 @@ class EditorStatus extends Disposable {
 		this.onEncodingChange(activeEditorPane, activeCodeEditor);
 		this.onIndentationChange(activeCodeEditor);
 		this.onMetadataChange(activeEditorPane);
+		this.updateFileSizeElement(resource);
 		this.currentMarkerStatus.update(activeCodeEditor);
 
 		// Dispose old active editor listeners
 		this.activeEditorListeners.clear();
+
+		// Update file size when resource changes.
+		if (resource) {
+			this.activeEditorListeners.add(this.fileService.onDidFilesChange((e) => {
+				if (e.affects(resource)) {
+					this.updateFileSizeElement(resource);
+				}
+			}));
+		}
 
 		// Attach new listeners to active editor
 		if (activeEditorPane) {
