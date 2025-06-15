@@ -21,7 +21,11 @@ export const enum PreviewState {
 export abstract class MediaPreview extends Disposable {
 
 	protected previewState = PreviewState.Visible;
-	private _binarySize: number | undefined;
+	protected _binarySize: number | undefined;
+
+	public get binarySize(): number | undefined {
+		return this._binarySize;
+	}
 
 	constructor(
 		extensionRoot: vscode.Uri,
@@ -102,7 +106,11 @@ export abstract class MediaPreview extends Disposable {
 
 		if (this._webviewEditor.active) {
 			this.previewState = PreviewState.Active;
-			this._binarySizeStatusBarEntry.show(this, this._binarySize);
+			if (this._binarySize !== undefined) {
+				this._binarySizeStatusBarEntry.show(this, this._binarySize);
+			} else {
+				this._binarySizeStatusBarEntry.hide(this);
+			}
 		} else {
 			this._binarySizeStatusBarEntry.hide(this);
 			this.previewState = PreviewState.Visible;

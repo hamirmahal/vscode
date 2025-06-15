@@ -110,6 +110,7 @@
 	"[plaintext]": {
 		"files.insertFinalNewline": false
 	},
+	"biome.enabled": false,
 	"[typescript]": {
 		"editor.defaultFormatter": "vscode.typescript-language-features",
 		"editor.formatOnSave": true
