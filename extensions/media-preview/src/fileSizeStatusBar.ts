@@ -5,8 +5,9 @@
 
 import * as vscode from 'vscode';
 import { SizeStatusBarEntry } from './sizeStatusBarEntry';
-export class BinarySizeStatusBarEntry extends SizeStatusBarEntry {
+export class FileSizeStatusBarEntry extends SizeStatusBarEntry {
+
 	constructor() {
-		super('status.imagePreview.binarySize', vscode.l10n.t("Image Binary Size"), vscode.StatusBarAlignment.Right, 100);
+		super('status.fileSize', vscode.l10n.t("File Size"), vscode.StatusBarAlignment.Right, 98);
 	}
 }
