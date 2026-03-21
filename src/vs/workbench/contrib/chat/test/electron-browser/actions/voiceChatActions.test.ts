@@ -5,7 +5,8 @@
 
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../base/test/common/utils.js';
-import { parseNextChatResponseChunk } from '../../../electron-browser/actions/voiceChatActions.js';
+import { applyDictationInputState, parseNextChatResponseChunk } from '../../../electron-browser/actions/voiceChatActions.js';
+import { SpeechToTextStatus } from '../../../../speech/common/speechService.js';
 
 suite('VoiceChatActions', function () {
 
@@ -38,6 +39,56 @@ suite('VoiceChatActions', function () {
 		// Sparted by newlines
 		offset = assertChunk('Hello World.\nHow is your', 'Hello World.', 0).offset;
 		assertChunk('Hello World.\nHow is your day?\n', 'How is your day?', offset);
+	});
+
+	test('applyDictationInputState treats Recognizing as preview replacement', function () {
+		let state = {
+			committedInput: '',
+			previewInput: ''
+		};
+
+		state = applyDictationInputState(state, '', 'I', SpeechToTextStatus.Recognizing);
+		assert.deepStrictEqual(state, {
+			committedInput: '',
+			previewInput: 'I'
+		});
+
+		state = applyDictationInputState(state, 'I', 'I just', SpeechToTextStatus.Recognizing);
+		assert.deepStrictEqual(state, {
+			committedInput: '',
+			previewInput: 'I just'
+		});
+
+		state = applyDictationInputState(state, 'I just', 'I just deleted all text', SpeechToTextStatus.Recognized);
+		assert.deepStrictEqual(state, {
+			committedInput: 'I just deleted all text',
+			previewInput: 'I just deleted all text'
+		});
+	});
+
+	test('applyDictationInputState rebases on manual user edits', function () {
+		let state = {
+			committedInput: 'typed text',
+			previewInput: 'typed text'
+		};
+
+		state = applyDictationInputState(state, 'typed text', 'hello', SpeechToTextStatus.Recognized);
+		assert.deepStrictEqual(state, {
+			committedInput: 'typed text hello',
+			previewInput: 'typed text hello'
+		});
+
+		state = applyDictationInputState(state, '', 'second phrase', SpeechToTextStatus.Recognizing);
+		assert.deepStrictEqual(state, {
+			committedInput: '',
+			previewInput: 'second phrase'
+		});
+
+		state = applyDictationInputState(state, 'second phrase', 'second phrase done', SpeechToTextStatus.Recognized);
+		assert.deepStrictEqual(state, {
+			committedInput: 'second phrase done',
+			previewInput: 'second phrase done'
+		});
 	});
 
 	ensureNoDisposablesAreLeakedInTestSuite();
